@@ -68,13 +68,27 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
 
             params = urllib.parse.parse_qs(parsed_url.query)
 
-            # 必需: password
+            # 必需: password（支持在 userinfo 中或 query 中）
             password = params.get('password', [None])[0]
+            if not password:
+                # 某些分享把密码放在 userinfo（hysteria2://PASSWORD@host:port）
+                # urlparse 会解析为 username 字段
+                try:
+                    ui = parsed_url.username
+                    if ui:
+                        password = urllib.parse.unquote(ui)
+                except Exception:
+                    pass
             if not password:
                 raise ValueError(f"缺少password参数: {decoded[:80]}...")
 
             # 可选参数
-            sni = params.get('sni', [None])[0] or params.get('server_name', [None])[0]
+            # 兼容部分实现使用 peer 作为 SNI 的情况
+            sni = (
+                params.get('sni', [None])[0]
+                or params.get('server_name', [None])[0]
+                or params.get('peer', [None])[0]
+            )
 
             insecure_raw = (params.get('insecure', ['0'])[0] or '').strip().lower()
             insecure = insecure_raw in ('1', 'true', 'yes', 'on')
