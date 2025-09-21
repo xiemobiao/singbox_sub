@@ -4,7 +4,8 @@ import time
 import secrets
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -95,6 +96,21 @@ def load_subscription(sid: str) -> str | None:
 
 _ensure_db()
 
+# 静态页面与资源
+static_dir = os.path.join(os.path.dirname(__file__), 'static')
+if os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/")
+async def index_page():
+    """提供简单的前端页面用于输入并转换订阅。"""
+    index_path = os.path.join(static_dir, 'index.html')
+    if os.path.isfile(index_path):
+        return FileResponse(index_path, media_type="text/html; charset=utf-8")
+    # 兜底：未找到静态文件时返回提示
+    return PlainTextResponse("Frontend not found. Please ensure static/index.html exists.")
+
 @app.post("/convert")
 @limiter.limit("5/minute")
 async def convert(body: ConvertRequest, request: Request):
@@ -108,8 +124,8 @@ async def convert(body: ConvertRequest, request: Request):
         singbox_config = generate_singbox_url(nodes)
 
         # 生成HTTP订阅URL
-        host = request.headers.get("host", "localhost:8000")
-        scheme = request.headers.get("x-forwarded-proto", "http")
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host", "localhost:8000")
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme or "http")
         subscription_url = f"{scheme}://{host}/subscription/{singbox_config}"
 
         # 生成短链并存储

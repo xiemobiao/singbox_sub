@@ -23,6 +23,7 @@ Hysteria2/Hy2 订阅转换为 Sing-box 配置的 FastAPI 服务，支持：
   - `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
 - 启动开发服务：
   - `uvicorn main:app --reload --host 0.0.0.0 --port 8000`
+  - 前端页面：启动后访问 `http://localhost:8000/`，可在页面中输入订阅并一键转换、复制结果。
 - Docker 运行：
   - `docker compose up --build`
 - 冒烟测试（脚本）：
@@ -45,6 +46,7 @@ Hysteria2/Hy2 订阅转换为 Sing-box 配置的 FastAPI 服务，支持：
 - 重要逻辑建议补充至 `tests/test_<module>.py`（pytest）。
 - 覆盖样例：
   - 原始 hy2/hysteria2 URI、多行输入、整段 base64、错误场景（缺少 password、非法 scheme 等）。
+  - 解析增强：支持 `#名称` 片段（作为节点名/tag）、更宽松的 SNI 与证书验证参数别名。
 
 ## 安全与配置
 - 认证：通过环境变量 `API_KEY` 设置，客户端以 `Authorization: Bearer <token>` 访问。
@@ -66,6 +68,7 @@ Hysteria2/Hy2 订阅转换为 Sing-box 配置的 FastAPI 服务，支持：
   - `ENABLE_DOH_DIRECT=true`：常见 DoH 域名直连（dns.google、cloudflare-dns.com 等）。
   - `BYPASS_DOMAINS=example.cn,*.local`：自定义直连域名（逗号分隔）。
   - `PROXY_DOMAINS=example.com`：自定义强制代理域名（逗号分隔）。
+  - `DEFAULT_ALPN=h3`：无订阅显式 `alpn` 时默认写入到 TLS（逗号分隔可多值；设为空禁用默认）。
 - 提示：`geosite`/`geoip` 规则需客户端侧提供数据库（多数 GUI 客户端内置）。若无，请在客户端配置或手动放置 `geosite.db` 与 `geoip.db`（可从 SagerNet 官方发布页下载）。
 
 ## 部署与更新
@@ -87,6 +90,11 @@ Hysteria2/Hy2 订阅转换为 Sing-box 配置的 FastAPI 服务，支持：
   - `?format=json|b64`；默认返回 base64 文本，`json` 返回解析后的 JSON。
 - `GET /subscription/id/{sid}`
   - 同上，基于短链存取。
+
+## 前端页面
+- `GET /`：提供简易页面，输入 Hy2/Hysteria2 节点或订阅并转换。
+- 可选填写 API Key（若后端启用认证）。
+- 转换后展示：Base64 配置、原始订阅 URL、短链与 JSON 短链，并支持一键复制与 JSON 预览。
 
 ## 许可证
 本仓库未声明许可证；如需分发或开源，请先补充 LICENSE 并遵循相应条款。

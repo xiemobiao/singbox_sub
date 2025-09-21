@@ -16,29 +16,36 @@ def generate_singbox_url(nodes: List[Dict[str, Any]]) -> str:
     
     outbounds = []
     for i, node in enumerate(nodes):
-        outbound = {
+        tag = node.get('name') or f"hysteria-{i}"
+        outbound: Dict[str, Any] = {
             "type": "hysteria2",
-            "tag": f"hysteria-{i}",
+            "tag": tag,
             "server": node['server'],
             "server_port": node['port'],
             "password": node['password'],
             "tls": {
                 "enabled": True,
-                "server_name": node.get('sni'),
-                "insecure": node['insecure'],
+                # server_name 在无 SNI 时不要写入 None，避免客户端不兼容
+                "insecure": bool(node['insecure']),
             }
         }
+        if node.get('sni'):
+            outbound["tls"]["server_name"] = node.get('sni')
         
-        # Obfs: type + password
-        if node.get('obfs'):
-            obfs_entry = {"type": node['obfs']}
-            if node.get('obfs_password'):
-                obfs_entry["password"] = node['obfs_password']
-            outbound["obfs"] = obfs_entry
+        # Obfs: 仅在类型为 salamander 且提供密码时写入
+        obfs_type = (node.get('obfs') or '').strip().lower() if node.get('obfs') else ''
+        obfs_pwd = node.get('obfs_password')
+        if obfs_type == 'salamander' and obfs_pwd:
+            outbound["obfs"] = {"type": "salamander", "password": obfs_pwd}
         
         # ALPN（置于 TLS 配置内）
         if node.get('alpn'):
             outbound["tls"]["alpn"] = node['alpn']
+        else:
+            # 默认提供 h3，兼容多数 hy2 服务端；可用环境变量覆盖/置空
+            default_alpn = os.getenv("DEFAULT_ALPN", "h3").strip()
+            if default_alpn:
+                outbound["tls"]["alpn"] = [p.strip() for p in default_alpn.split(',') if p.strip()]
         
         # 证书（sing-box 出站 TLS 使用 certificate/certificate_path；不使用 ca 字段）
         # 支持：直接提供 PEM 文本，或 base64(PEM)

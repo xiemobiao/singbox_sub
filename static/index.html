@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hy2 → Sing-box 转换器</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; margin: 0; }
+    .container { max-width: 920px; margin: 0 auto; padding: 20px; }
+    h1 { font-size: 20px; margin: 0 0 14px; }
+    .card { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    label { font-weight: 600; display: block; margin-bottom: 6px; }
+    textarea, input[type="text"], input[type="password"] { width: 100%; box-sizing: border-box; border: 1px solid rgba(127,127,127,.35); border-radius: 8px; padding: 10px; font: inherit; }
+    textarea { min-height: 130px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row > div { min-width: 0; }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    button { appearance: none; border: 1px solid rgba(127,127,127,.35); background: transparent; padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit; }
+    button.primary { background: #3b82f6; color: white; border-color: #3b82f6; }
+    .muted { opacity: .8; font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .result pre { white-space: pre-wrap; word-break: break-all; border: 1px solid rgba(127,127,127,.35); padding: 10px; border-radius: 8px; max-height: 260px; overflow: auto; }
+    .grid { display: grid; gap: 8px; }
+    .kv { display: grid; gap: 6px; grid-template-columns: 130px 1fr auto; align-items: center; }
+    .copy { padding: 6px 10px; }
+    .ok { color: #16a34a; }
+    .err { color: #dc2626; }
+    .hidden { display: none; }
+  </style>
+  <meta name="color-scheme" content="light dark" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="format-detection" content="telephone=no" />
+</head>
+<body>
+  <div class="container">
+    <h1>Hysteria2/Hy2 → Sing-box 转换器</h1>
+
+    <div class="card">
+      <label for="sub">输入 Hysteria2/Hy2 订阅（支持原始 URI、多行、整段 Base64、或远端 URL）</label>
+      <textarea id="sub" placeholder="例如：
+hy2://example.com:443?password=pw&sni=example.com#示例节点
+或粘贴远端订阅 URL"></textarea>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label for="apikey">API Key（可选，若后端启用认证）</label>
+          <input id="apikey" type="password" placeholder="Bearer Token" />
+        </div>
+        <div>
+          <label for="alpn">默认 ALPN（可选，覆盖后端 DEFAULT_ALPN）</label>
+          <input id="alpn" type="text" placeholder="例如：h3 或 h2,h3（留空不覆盖）" />
+        </div>
+      </div>
+      <div class="btns">
+        <button class="primary" id="btn-convert">转换</button>
+        <button id="btn-clear">清空</button>
+        <button id="btn-paste">从剪贴板粘贴</button>
+      </div>
+      <div id="msg" class="muted" style="margin-top:8px"></div>
+    </div>
+
+    <div id="panel-result" class="card hidden result">
+      <div class="grid">
+        <div class="kv">
+          <div>节点数量</div>
+          <div id="nodes-count" class="mono"></div>
+          <div></div>
+        </div>
+
+        <div class="kv">
+          <div>Base64 配置</div>
+          <div>
+            <pre id="b64" class="mono"></pre>
+          </div>
+          <div>
+            <button class="copy" data-copy="#b64">复制</button>
+          </div>
+        </div>
+
+        <div class="kv">
+          <div>订阅 URL</div>
+          <input id="url" class="mono" type="text" readonly />
+          <div><button class="copy" data-copy="#url">复制</button></div>
+        </div>
+
+        <div class="kv">
+          <div>短链</div>
+          <input id="url-short" class="mono" type="text" readonly />
+          <div><button class="copy" data-copy="#url-short">复制</button></div>
+        </div>
+
+        <div class="kv">
+          <div>短链 JSON</div>
+          <input id="url-short-json" class="mono" type="text" readonly />
+          <div>
+            <button class="copy" data-copy="#url-short-json">复制</button>
+          </div>
+        </div>
+
+        <details>
+          <summary>预览 JSON 配置</summary>
+          <pre id="json-preview" class="mono"></pre>
+        </details>
+      </div>
+    </div>
+
+    <p class="muted">提示：后端每分钟默认限 5 次转换；若启用 API Key，请在上方填写。</p>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const msg = (text, cls = '') => { const m = $("#msg"); m.textContent = text || ''; m.className = 'muted ' + cls; };
+
+    async function copyFrom(selector) {
+      const el = $(selector);
+      const text = el?.value ?? el?.textContent ?? '';
+      if (!text) return;
+      try { await navigator.clipboard.writeText(text); msg('已复制到剪贴板', 'ok'); } catch { msg('复制失败，请手动复制', 'err'); }
+    }
+
+    async function pasteToTextarea() {
+      try {
+        const text = await navigator.clipboard.readText();
+        $("#sub").value = text || '';
+      } catch { msg('无法读取剪贴板（需要权限）', 'err'); }
+    }
+
+    function buildHeaders() {
+      const headers = { 'Content-Type': 'application/json' };
+      const token = $("#apikey").value.trim();
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
+    async function previewJson(b64) {
+      try {
+        const resp = await fetch(`/subscription/${b64}?format=json`, { method: 'GET' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        $("#json-preview").textContent = JSON.stringify(data, null, 2);
+      } catch(_) {}
+    }
+
+    async function convert() {
+      const subscription = $("#sub").value.trim();
+      if (!subscription) { msg('请输入订阅内容', 'err'); return; }
+      msg('转换中...');
+
+      // 可选：通过查询参数 hint 覆盖默认 ALPN，后端读取环境变量 DEFAULT_ALPN；
+      // 这里仅作为示例，不改变协议。若需严格前端控制，可在后端增加参数。
+      const alpn = $("#alpn").value.trim();
+
+      try {
+        const resp = await fetch('/convert', {
+          method: 'POST',
+          headers: buildHeaders(),
+          body: JSON.stringify({ subscription })
+        });
+        const text = await resp.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch { throw new Error(text || '未知错误'); }
+        if (!resp.ok) throw new Error(data?.detail || '请求失败');
+
+        $("#panel-result").classList.remove('hidden');
+        $("#nodes-count").textContent = data.nodes_count ?? '';
+        $("#b64").textContent = data.singbox_config ?? '';
+        $("#url").value = data.subscription_url ?? '';
+        $("#url-short").value = data.subscription_url_short ?? '';
+        $("#url-short-json").value = data.subscription_url_short_json ?? '';
+        msg('转换成功', 'ok');
+
+        // 预览 JSON
+        await previewJson(data.singbox_config);
+      } catch (e) {
+        msg('转换失败：' + (e?.message || e), 'err');
+      }
+    }
+
+    document.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (t.matches('.copy')) {
+        const sel = t.getAttribute('data-copy');
+        if (sel) copyFrom(sel);
+      }
+    });
+    $("#btn-convert").addEventListener('click', convert);
+    $("#btn-clear").addEventListener('click', () => { $("#sub").value = ''; msg(''); });
+    $("#btn-paste").addEventListener('click', pasteToTextarea);
+  </script>
+</body>
+</html>
+

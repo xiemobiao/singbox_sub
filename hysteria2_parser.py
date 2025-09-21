@@ -14,8 +14,14 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
     - scheme: hysteria2:// 或 hy2://
 
     参数映射：
-    - 必需：password
-    - 可选：sni/server_name, insecure(1/true/yes/on), obfs(type), obfs-password(或 salamander 直接作为密码), alpn(逗号分隔), ca
+    - 必需：password（可在 userinfo 或 query 中）
+    - 可选：
+      - SNI：sni/server_name/peer/peername/host/hostname
+      - 不校验证书：insecure/allow-insecure/allowInsecure/skip-cert-verify（1/true/yes/on）或 verify=0
+      - 混淆：obfs（仅支持 salamander），obfs-password（或 salamander= 作为密码）
+      - ALPN：alpn（逗号分隔）
+      - 证书：ca（PEM 文本或其 base64）
+      - 名称：URI 片段（#Name）保存在 name 字段
     """
     try:
         # 如果是URL，获取内容
@@ -66,10 +72,13 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
             if not server or port is None:
                 raise ValueError(f"无效的服务器/端口: {decoded[:80]}...")
 
-            params = urllib.parse.parse_qs(parsed_url.query)
+            params_raw = urllib.parse.parse_qs(parsed_url.query)
+            # 统一使用小写键，取第一个值
+            params: Dict[str, str] = {k.lower(): (v[0] if isinstance(v, list) else v)
+                                      for k, v in params_raw.items()}
 
             # 必需: password（支持在 userinfo 中或 query 中）
-            password = params.get('password', [None])[0]
+            password = params.get('password')
             if not password:
                 # 某些分享把密码放在 userinfo（hysteria2://PASSWORD@host:port）
                 # urlparse 会解析为 username 字段
@@ -85,28 +94,49 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
             # 可选参数
             # 兼容部分实现使用 peer 作为 SNI 的情况
             sni = (
-                params.get('sni', [None])[0]
-                or params.get('server_name', [None])[0]
-                or params.get('peer', [None])[0]
+                params.get('sni')
+                or params.get('server_name')
+                or params.get('peer')
+                or params.get('peername')
+                or params.get('host')
+                or params.get('hostname')
             )
 
-            insecure_raw = (params.get('insecure', ['0'])[0] or '').strip().lower()
-            insecure = insecure_raw in ('1', 'true', 'yes', 'on')
+            def _truthy(val: str | None) -> bool:
+                if val is None:
+                    return False
+                return val.strip().lower() in ('1', 'true', 'yes', 'on')
+
+            def _falsy(val: str | None) -> bool:
+                if val is None:
+                    return False
+                return val.strip().lower() in ('0', 'false', 'no', 'off')
+
+            insecure = (
+                _truthy(params.get('insecure'))
+                or _truthy(params.get('allow-insecure'))
+                or _truthy(params.get('allowinsecure'))
+                or _truthy(params.get('skip-cert-verify'))
+                or _falsy(params.get('verify'))  # verify=0 等价于 insecure
+            )
 
             # Obfs: type + password
-            obfs_type = params.get('obfs', [None])[0]
-            obfs_password = params.get('obfs-password', [None])[0]
+            obfs_type = params.get('obfs')
+            obfs_password = params.get('obfs-password')
             # 某些分享可能直接用 salamander=xxx 表示密码
             if not obfs_password:
-                obfs_password = params.get('salamander', [None])[0]
+                obfs_password = params.get('salamander')
 
             # ALPN: 逗号分隔 -> 数组
-            alpn_raw = params.get('alpn', [None])[0]
+            alpn_raw = params.get('alpn')
             alpn_list = None
             if alpn_raw:
                 alpn_list = [p.strip() for p in alpn_raw.split(',') if p.strip()]
 
-            ca = params.get('ca', [None])[0]
+            ca = params.get('ca')
+
+            # 名称（来自 URI 片段 #name）
+            name = urllib.parse.unquote(parsed_url.fragment) if parsed_url.fragment else None
 
             node = {
                 'server': server,
@@ -118,6 +148,7 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
                 'obfs_password': obfs_password,
                 'alpn': alpn_list,
                 'ca': ca,
+                'name': name,
             }
             nodes.append(node)
 
