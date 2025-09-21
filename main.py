@@ -200,8 +200,14 @@ async def get_subscription(config: str, request: Request):
         else:
             base64.urlsafe_b64decode(config)
 
-        # 格式处理
-        fmt = (request.query_params.get("format") or "b64").lower()
+        # 格式处理：若无 format 参数，根据 Accept/UA 选择默认
+        fmt_qs = request.query_params.get("format")
+        if fmt_qs:
+            fmt = fmt_qs.lower()
+        else:
+            accept = (request.headers.get("accept") or "").lower()
+            ua = (request.headers.get("user-agent") or "").lower()
+            fmt = "json" if ("application/json" in accept or "sing-box" in ua) else "b64"
         if fmt in ("json", "application/json"):
             raw = base64.urlsafe_b64decode(config + ('=' * pad) if pad else config)
             try:
@@ -226,7 +232,14 @@ async def get_subscription_by_id(sid: str, request: Request):
         # 验证 base64
         base64.urlsafe_b64decode(encoded + ('=' * pad) if pad else encoded)
 
-        fmt = (request.query_params.get("format") or "b64").lower()
+        # 默认根据 Accept/UA 选择 json，除非 URL 明确指定 format
+        fmt_qs = request.query_params.get("format")
+        if fmt_qs:
+            fmt = fmt_qs.lower()
+        else:
+            accept = (request.headers.get("accept") or "").lower()
+            ua = (request.headers.get("user-agent") or "").lower()
+            fmt = "json" if ("application/json" in accept or "sing-box" in ua) else "b64"
         if fmt in ("json", "application/json"):
             raw = base64.urlsafe_b64decode(encoded + ('=' * pad) if pad else encoded)
             try:
