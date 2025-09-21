@@ -80,10 +80,12 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         outbounds.append(outbound)
 
     # 汇聚出站，方便客户端选择
+    selector_outs = [ob['tag'] for ob in outbounds]
     selector = {
         "type": "selector",
         "tag": "proxy",
-        "outbounds": [ob['tag'] for ob in outbounds]
+        "outbounds": selector_outs,
+        "default": selector_outs[0] if selector_outs else None,
     }
 
     # 基础直连（私网）
