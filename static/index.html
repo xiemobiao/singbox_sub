@@ -84,6 +84,12 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
           </label>
           <div class="muted">将 geosite:geolocation-!cn 显式走代理</div>
         </div>
+        <div>
+          <label>
+            <input id="use-ruleset" type="checkbox" checked /> 使用 rule-set（推荐）
+          </label>
+          <div class="muted">消除 geosite/geoip 弃用警告</div>
+        </div>
       </div>
       <div class="row" style="margin-top:8px">
         <div>
@@ -219,6 +225,8 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         if (doh) payload.enable_doh_direct = true;
         const strict = document.querySelector('#strict')?.checked;
         if (strict) payload.strict_global_proxy = true;
+        const useRS = document.querySelector('#use-ruleset')?.checked;
+        if (useRS !== undefined) payload.use_rule_set = !!useRS;
         const alpn = document.querySelector('#alpn')?.value?.trim();
         if (alpn) payload.default_alpn = alpn;
         const bypass = document.querySelector('#bypass')?.value?.trim();

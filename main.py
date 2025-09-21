@@ -28,6 +28,7 @@ class ConvertRequest(BaseModel):
     strict_global_proxy: Optional[bool] = None
     bypass_domains: Optional[str] = None
     proxy_domains: Optional[str] = None
+    use_rule_set: Optional[bool] = None
     # 默认为空；当节点未提供 alpn 时可用逗号分隔覆盖，如 "h2,h3"
     default_alpn: Optional[str] = None
 
@@ -157,6 +158,7 @@ async def convert(body: ConvertRequest, request: Request):
             "strict_global_proxy": body.strict_global_proxy,
             "bypass_domains": body.bypass_domains,
             "proxy_domains": body.proxy_domains,
+            "use_rule_set": body.use_rule_set,
             "default_alpn": body.default_alpn,
         }
         options = {k: v for k, v in options.items() if v is not None}
