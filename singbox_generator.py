@@ -3,18 +3,29 @@ import base64
 import os
 from typing import List, Dict, Any, Optional
 
+
 def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str, Any]] = None) -> str:
     """
-    从节点列表生成 Sing-box 配置的 base64（URL-safe）。
+    从节点列表生成 Sing-box 配置，并返回 URL 安全的 Base64 字符串。
 
-    :param nodes: 解析后的节点列表
-    :return: base64(JSON config)，可直接用于 sing-box 订阅导入
-    :raises ValueError: 无节点
+    :param nodes: 已解析的节点列表（由 hysteria2_parser 提供）
+    :param options: 可选生成参数，优先级高于环境变量，支持：
+        - rules_preset: 规则预设（cn_direct/global_direct/global_proxy/proxy_domains_only/direct_domains_only）
+        - enable_adblock: 是否开启广告域名拦截
+        - enable_doh_direct: 是否将常见 DoH 域名直连
+        - strict_global_proxy: 是否显式 geosite:geolocation-!cn 走代理
+        - bypass_domains: 直连域名（逗号分隔字符串）
+        - proxy_domains: 代理域名（逗号分隔字符串）
+        - default_alpn: 默认 ALPN（如 "h3" 或 "h2,h3"），仅在节点未提供 alpn 时生效
+    :return: base64(JSON config) 去除尾部 = 的 URL 安全字符串
+    :raises ValueError: 无节点时报错
     """
     if not nodes:
         raise ValueError("没有节点可生成配置")
-    
-    outbounds = []
+
+    options = options or {}
+
+    outbounds: List[Dict[str, Any]] = []
     for i, node in enumerate(nodes):
         tag = node.get('name') or f"hysteria-{i}"
         outbound: Dict[str, Any] = {
@@ -25,30 +36,31 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
             "password": node['password'],
             "tls": {
                 "enabled": True,
-                # server_name 在无 SNI 时不要写入 None，避免客户端不兼容
                 "insecure": bool(node['insecure']),
             }
         }
         if node.get('sni'):
             outbound["tls"]["server_name"] = node.get('sni')
-        
-        # Obfs: 仅在类型为 salamander 且提供密码时写入
+
+        # Obfs：仅在 salamander 且提供密码时写入
         obfs_type = (node.get('obfs') or '').strip().lower() if node.get('obfs') else ''
         obfs_pwd = node.get('obfs_password')
         if obfs_type == 'salamander' and obfs_pwd:
             outbound["obfs"] = {"type": "salamander", "password": obfs_pwd}
-        
-        # ALPN（置于 TLS 配置内）
+
+        # ALPN：优先节点自带；否则 options.default_alpn；最后 DEFAULT_ALPN
         if node.get('alpn'):
             outbound["tls"]["alpn"] = node['alpn']
         else:
-            # 默认提供 h3，兼容多数 hy2 服务端；可用环境变量覆盖/置空
-            default_alpn = os.getenv("DEFAULT_ALPN", "h3").strip()
-            if default_alpn:
-                outbound["tls"]["alpn"] = [p.strip() for p in default_alpn.split(',') if p.strip()]
-        
-        # 证书（sing-box 出站 TLS 使用 certificate/certificate_path；不使用 ca 字段）
-        # 支持：直接提供 PEM 文本，或 base64(PEM)
+            opt_alpn = str(options.get("default_alpn") or "").strip()
+            if opt_alpn:
+                outbound["tls"]["alpn"] = [p.strip() for p in opt_alpn.split(',') if p.strip()]
+            else:
+                default_alpn = os.getenv("DEFAULT_ALPN", "h3").strip()
+                if default_alpn:
+                    outbound["tls"]["alpn"] = [p.strip() for p in default_alpn.split(',') if p.strip()]
+
+        # TLS 证书（PEM 文本或 base64(PEM)）
         if node.get('ca'):
             try:
                 ca_val = node['ca']
@@ -60,24 +72,22 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
                     decoded = ca_bytes.decode('utf-8', errors='ignore')
                     if '-----BEGIN' in decoded:
                         pem_text = decoded
-
                 if pem_text:
-                    # sing-box 文档描述为“certificate line array”，此处按行切分以提高兼容性
                     outbound["tls"]["certificate"] = [line for line in pem_text.splitlines()]
             except Exception:
-                # 若格式无法识别，则忽略证书以避免错误配置
                 pass
-        
+
         outbounds.append(outbound)
-    
-    # 添加 selector 作为可选的聚合出站（放在 outbounds 列表中）
+
+    # 汇聚出站，方便客户端选择
     selector = {
         "type": "selector",
         "tag": "proxy",
         "outbounds": [ob['tag'] for ob in outbounds]
     }
-    # 基础路由：私网直连；可选：CN 直连、广告拦截、DoH 直连、自定义直连/代理域名；最终走 proxy
-    rules = [
+
+    # 基础直连（私网）
+    rules: List[Dict[str, Any]] = [
         {
             "outbound": "direct",
             "ip_cidr": [
@@ -92,19 +102,19 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         },
     ]
 
-    preset_opt = (options or {}).get("rules_preset") if options else None
-    preset_env = os.getenv("RULES_PRESET", "")
-    preset = (preset_opt or preset_env or "").strip().lower()
+    # 读取请求/环境配置（请求优先）
+    preset = (options.get("rules_preset") or os.getenv("RULES_PRESET", "")).strip().lower()
     enable_cn_rules_env = os.getenv("ENABLE_CN_RULES", "").lower() in ("1", "true", "yes", "on")
-    enable_doh_direct = (options.get("enable_doh_direct") if options and options.get("enable_doh_direct") is not None else os.getenv("ENABLE_DOH_DIRECT", "").lower() in ("1", "true", "yes", "on"))
-    strict_global_proxy = (options.get("strict_global_proxy") if options and options.get("strict_global_proxy") is not None else os.getenv("STRICT_GLOBAL_PROXY", "").lower() in ("1", "true", "yes", "on"))
-    bypass_env = os.getenv("BYPASS_DOMAINS", "")
-    proxy_env = os.getenv("PROXY_DOMAINS", "")
-    bypass_str = (options.get("bypass_domains") if options else None) or bypass_env
-    proxy_str = (options.get("proxy_domains") if options else None) or proxy_env
-    bypass_domains = [d.strip() for d in (bypass_str or "").split(",") if d.strip()]
-    proxy_domains = [d.strip() for d in (proxy_str or "").split(",") if d.strip()]
+    enable_adblock = options.get("enable_adblock") if options.get("enable_adblock") is not None else os.getenv("ENABLE_ADBLOCK", "").lower() in ("1", "true", "yes", "on")
+    enable_doh_direct = options.get("enable_doh_direct") if options.get("enable_doh_direct") is not None else os.getenv("ENABLE_DOH_DIRECT", "").lower() in ("1", "true", "yes", "on")
+    strict_global_proxy = options.get("strict_global_proxy") if options.get("strict_global_proxy") is not None else os.getenv("STRICT_GLOBAL_PROXY", "").lower() in ("1", "true", "yes", "on")
 
+    bypass_str = options.get("bypass_domains") if options.get("bypass_domains") is not None else os.getenv("BYPASS_DOMAINS", "")
+    proxy_str = options.get("proxy_domains") if options.get("proxy_domains") is not None else os.getenv("PROXY_DOMAINS", "")
+    bypass_domains = [d.strip() for d in (bypass_str or "").split(',') if d.strip()]
+    proxy_domains = [d.strip() for d in (proxy_str or "").split(',') if d.strip()]
+
+    # 预设
     if enable_cn_rules_env or preset in ("cn_direct", "cn-direct", "cn"):
         rules.extend([
             {"outbound": "direct", "ip_cidr": ["geoip:cn"]},
@@ -126,16 +136,9 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
     else:
         final_tag = "proxy"
 
-    # 广告拦截（需要 geosite 数据库）：将广告域名导向阻断出站
-    enable_adblock = (options.get("enable_adblock") if options and options.get("enable_adblock") is not None else os.getenv("ENABLE_ADBLOCK", "").lower() in ("1", "true", "yes", "on"))
+    # 广告拦截与 DoH 直连
     if enable_adblock:
         rules.append({"outbound": "block", "domain": ["geosite:category-ads-all"]})
-
-    # 明确将非 CN 域名走代理（可选，通常 final=proxy 已满足）
-    if strict_global_proxy:
-        rules.append({"outbound": "proxy", "domain": ["geosite:geolocation-!cn"]})
-
-    # DoH 常见域名直连（可选）
     if enable_doh_direct:
         rules.append({"outbound": "direct", "domain": [
             "dns.google",
@@ -145,10 +148,13 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
             "dns.alidns.com",
         ]})
 
-    # 自定义直连/代理域名（逗号分隔）
+    # 严格全局代理（确保非 CN 显式走代理）
+    if strict_global_proxy:
+        rules.append({"outbound": "proxy", "domain": ["geosite:geolocation-!cn"]})
+
+    # 自定义直连/代理域名（与“仅*域名”预设互斥追加）
     if bypass_domains and preset not in ("proxy_domains_only", "proxy_only"):
         rules.append({"outbound": "direct", "domain": bypass_domains})
-
     if proxy_domains and preset not in ("direct_domains_only", "bypass_only"):
         rules.append({"outbound": "proxy", "domain": proxy_domains})
 
@@ -157,7 +163,7 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         "final": final_tag,
     }
 
-    # 如开启广告拦截，提供阻断出站
+    # 如启用广告拦截，提供 block 出站
     if enable_adblock:
         outbounds.append({"type": "block", "tag": "block"})
 
@@ -165,12 +171,11 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         "outbounds": outbounds + [selector],
         "route": route,
     }
-    
-    # 紧凑且稳定键序的 JSON，便于生成一致的 base64 输出
+
+    # 紧凑且键序稳定的 JSON
     json_str = json.dumps(config, separators=(',', ':'), sort_keys=True)
-    
-    # Base64 URL安全编码
-    encoded = base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8')
-    encoded = encoded.rstrip('=')  # 移除填充以符合URL格式
-    
+
+    # URL 安全 Base64（去除填充）
+    encoded = base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8').rstrip('=')
     return encoded
+

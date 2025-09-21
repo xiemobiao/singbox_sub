@@ -200,6 +200,8 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         if (doh) payload.enable_doh_direct = true;
         const strict = document.querySelector('#strict')?.checked;
         if (strict) payload.strict_global_proxy = true;
+        const alpn = document.querySelector('#alpn')?.value?.trim();
+        if (alpn) payload.default_alpn = alpn;
         const bypass = document.querySelector('#bypass')?.value?.trim();
         if (bypass) payload.bypass_domains = bypass;
         const proxyd = document.querySelector('#proxyd')?.value?.trim();

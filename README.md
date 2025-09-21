@@ -105,6 +105,7 @@ Hysteria2/Hy2 订阅转换为 Sing-box 配置的 FastAPI 服务，支持：
 - 请求参数（优先级高于环境变量）：`rules_preset`、`enable_adblock`、`enable_doh_direct`、`strict_global_proxy`、`bypass_domains`、`proxy_domains`。
 - 客户端需提供 `geosite.db`/`geoip.db` 才能识别 geosite/geoip 规则。
 
+- 额外参数：default_alpn 用于在节点未指定 alpn 时覆盖默认 ALPN（例如 h3 或 h2,h3）；若未提供，则回退到环境变量 DEFAULT_ALPN（默认为 h3）。
 ### 示例
 
 - API：`curl -X POST http://<host>:<port>/convert -H 'Content-Type: application/json' -d '{"subscription":"<你的订阅>","rules_preset":"cn_direct","enable_doh_direct":true}'`
