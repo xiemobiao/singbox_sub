@@ -1,9 +1,9 @@
 import json
 import base64
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-def generate_singbox_url(nodes: List[Dict[str, Any]]) -> str:
+def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str, Any]] = None) -> str:
     """
     从节点列表生成 Sing-box 配置的 base64（URL-safe）。
 

@@ -51,6 +51,14 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
           <input id="alpn" type="text" placeholder="例如：h3 或 h2,h3（留空不覆盖）" />
         </div>
       </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>
+            <input id="preset-cn" type="checkbox" /> 国内直连（国外代理）
+          </label>
+          <div class="muted">等同 RULES_PRESET=cn_direct</div>
+        </div>
+      </div>
       <div class="btns">
         <button class="primary" id="btn-convert">转换</button>
         <button id="btn-clear">清空</button>
@@ -154,7 +162,10 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         const resp = await fetch('/convert', {
           method: 'POST',
           headers: buildHeaders(),
-          body: JSON.stringify({ subscription })
+          const presetCn = document.querySelector('#preset-cn')?.checked;
+          const payload = { subscription };
+          if (presetCn) payload.rules_preset = 'cn_direct';
+          body: JSON.stringify(payload)
         });
         const text = await resp.text();
         let data = null;
@@ -189,4 +200,3 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
   </script>
 </body>
 </html>
-

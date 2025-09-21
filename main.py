@@ -3,6 +3,7 @@ import sqlite3
 import time
 import secrets
 import uvicorn
+from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +21,8 @@ from utils import validate_subscription_format, log_error, log_info
 # Pydantic 模型
 class ConvertRequest(BaseModel):
     subscription: str
+    # 可选：规则预设；前端勾选“国内直连（国外代理）”时传入 'cn_direct'
+    rules_preset: Optional[str] = None
 
 
 # FastAPI app
@@ -141,7 +144,8 @@ async def convert(body: ConvertRequest, request: Request):
     try:
         validate_subscription_format(body.subscription)
         nodes = parse_hysteria2_subscription(body.subscription)
-        singbox_config = generate_singbox_url(nodes)
+        options = {"rules_preset": body.rules_preset} if body.rules_preset else None
+        singbox_config = generate_singbox_url(nodes, options)
 
         # 生成 HTTP 订阅 URL（考虑反代头）
         host = request.headers.get("x-forwarded-host") or request.headers.get("host", "localhost:8000")
@@ -228,4 +232,3 @@ if __name__ == "__main__":
     import logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     uvicorn.run(app, host="0.0.0.0", port=port)
-

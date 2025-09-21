@@ -7,6 +7,12 @@ services:
       - "8000:8000"
     environment:
       - API_KEY=${API_KEY:-}
+      # 国内直连/国外代理 预设（也可在 1Panel 环境变量里设置）
+      - RULES_PRESET=${RULES_PRESET:-cn_direct}
+      # 可选：常见 DoH 域名直连
+      # - ENABLE_DOH_DIRECT=${ENABLE_DOH_DIRECT:-1}
+      # 可选：广告拦截（需要 geosite 数据）
+      # - ENABLE_ADBLOCK=${ENABLE_ADBLOCK:-0}
       - PORT=8000
     restart: unless-stopped
     volumes:
