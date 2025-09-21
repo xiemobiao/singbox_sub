@@ -135,6 +135,20 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
 
             ca = params.get('ca')
 
+            # 端口跳跃（mport），形如 30000-31000 或 30000:31000
+            mport_raw = params.get('mport') or params.get('multiport')
+            server_ports = None
+            if mport_raw:
+                rng = mport_raw.strip().replace(' ', '')
+                if '-' in rng:
+                    a, b = rng.split('-', 1)
+                    if a.isdigit() and b.isdigit():
+                        server_ports = [f"{int(a)}:{int(b)}"]
+                elif ':' in rng:
+                    a, b = rng.split(':', 1)
+                    if a.isdigit() and b.isdigit():
+                        server_ports = [f"{int(a)}:{int(b)}"]
+
             # 名称（来自 URI 片段 #name）
             name = urllib.parse.unquote(parsed_url.fragment) if parsed_url.fragment else None
 
@@ -150,6 +164,8 @@ def parse_hysteria2_subscription(subscription: str) -> List[Dict[str, Any]]:
                 'ca': ca,
                 'name': name,
             }
+            if server_ports:
+                node['server_ports'] = server_ports
             nodes.append(node)
 
         if not nodes:
