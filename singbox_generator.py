@@ -116,9 +116,10 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
 
     # 预设
     if enable_cn_rules_env or preset in ("cn_direct", "cn-direct", "cn"):
+        # 使用 sing-box 原生匹配字段：geoip/geosite，而不是把 geoip:xx 放进 ip_cidr
         rules.extend([
-            {"outbound": "direct", "ip_cidr": ["geoip:cn"]},
-            {"outbound": "direct", "domain": ["geosite:geolocation-cn", "geosite:cn"]},
+            {"outbound": "direct", "geoip": ["cn"]},
+            {"outbound": "direct", "geosite": ["geolocation-cn", "cn"]},
         ])
         final_tag = "proxy"
     elif preset in ("global_direct", "direct_all", "direct"):
@@ -138,7 +139,7 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
 
     # 广告拦截与 DoH 直连
     if enable_adblock:
-        rules.append({"outbound": "block", "domain": ["geosite:category-ads-all"]})
+        rules.append({"outbound": "block", "geosite": ["category-ads-all"]})
     if enable_doh_direct:
         rules.append({"outbound": "direct", "domain": [
             "dns.google",
@@ -150,7 +151,8 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
 
     # 严格全局代理（确保非 CN 显式走代理）
     if strict_global_proxy:
-        rules.append({"outbound": "proxy", "domain": ["geosite:geolocation-!cn"]})
+        # 显式将非 CN 域名走代理
+        rules.append({"outbound": "proxy", "geosite": ["geolocation-!cn"]})
 
     # 自定义直连/代理域名（与“仅*域名”预设互斥追加）
     if bypass_domains and preset not in ("proxy_domains_only", "proxy_only"):
@@ -178,4 +180,3 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
     # URL 安全 Base64（去除填充）
     encoded = base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8').rstrip('=')
     return encoded
-
