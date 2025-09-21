@@ -96,6 +96,14 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
           <input id="proxyd" type="text" placeholder="例如：example.com,*.google.com" />
         </div>
       </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>
+            <input id="strict" type="checkbox" /> 严格全局代理
+          </label>
+          <div class="muted">将 geosite:geolocation-!cn 显式走代理</div>
+        </div>
+      </div>
       <div class="btns">
         <button class="primary" id="btn-convert">转换</button>
         <button id="btn-clear">清空</button>
@@ -204,6 +212,8 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         if (adblock) payload.enable_adblock = true;
         const doh = document.querySelector('#doh')?.checked;
         if (doh) payload.enable_doh_direct = true;
+        const strict = document.querySelector('#strict')?.checked;
+        if (strict) payload.strict_global_proxy = true;
         const bypass = document.querySelector('#bypass')?.value?.trim();
         if (bypass) payload.bypass_domains = bypass;
         const proxyd = document.querySelector('#proxyd')?.value?.trim();

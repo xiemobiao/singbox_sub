@@ -98,3 +98,14 @@ Hysteria2/Hy2 订阅转换为 Sing-box 配置的 FastAPI 服务，支持：
 
 ## 许可证
 本仓库未声明许可证；如需分发或开源，请先补充 LICENSE 并遵循相应条款。
+## 规则预设与请求参数
+
+- 预设（可通过环境变量或请求参数启用）：`RULES_PRESET` 支持：`cn_direct`（国内直连、国外代理）、`global_direct`、`global_proxy`、`proxy_domains_only`、`direct_domains_only`。
+- 环境变量：`RULES_PRESET`、`ENABLE_CN_RULES`、`ENABLE_ADBLOCK`、`ENABLE_DOH_DIRECT`、`STRICT_GLOBAL_PROXY`、`BYPASS_DOMAINS`、`PROXY_DOMAINS`。
+- 请求参数（优先级高于环境变量）：`rules_preset`、`enable_adblock`、`enable_doh_direct`、`strict_global_proxy`、`bypass_domains`、`proxy_domains`。
+- 客户端需提供 `geosite.db`/`geoip.db` 才能识别 geosite/geoip 规则。
+
+### 示例
+
+- API：`curl -X POST http://<host>:<port>/convert -H 'Content-Type: application/json' -d '{"subscription":"<你的订阅>","rules_preset":"cn_direct","enable_doh_direct":true}'`
+- Compose：在 `docker-compose.yml` 中设置：`RULES_PRESET=cn_direct`（已默认）
