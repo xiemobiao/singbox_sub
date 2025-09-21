@@ -23,6 +23,11 @@ class ConvertRequest(BaseModel):
     subscription: str
     # 可选：规则预设；前端勾选“国内直连（国外代理）”时传入 'cn_direct'
     rules_preset: Optional[str] = None
+    enable_adblock: Optional[bool] = None
+    enable_doh_direct: Optional[bool] = None
+    strict_global_proxy: Optional[bool] = None
+    bypass_domains: Optional[str] = None
+    proxy_domains: Optional[str] = None
 
 
 # FastAPI app
@@ -144,8 +149,16 @@ async def convert(body: ConvertRequest, request: Request):
     try:
         validate_subscription_format(body.subscription)
         nodes = parse_hysteria2_subscription(body.subscription)
-        options = {"rules_preset": body.rules_preset} if body.rules_preset else None
-        singbox_config = generate_singbox_url(nodes, options)
+        options = {
+            "rules_preset": body.rules_preset,
+            "enable_adblock": body.enable_adblock,
+            "enable_doh_direct": body.enable_doh_direct,
+            "strict_global_proxy": body.strict_global_proxy,
+            "bypass_domains": body.bypass_domains,
+            "proxy_domains": body.proxy_domains,
+        }
+        options = {k: v for k, v in options.items() if v is not None}
+        singbox_config = generate_singbox_url(nodes, options if options else None)
 
         # 生成 HTTP 订阅 URL（考虑反代头）
         host = request.headers.get("x-forwarded-host") or request.headers.get("host", "localhost:8000")

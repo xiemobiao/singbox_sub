@@ -59,6 +59,43 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
           <div class="muted">等同 RULES_PRESET=cn_direct</div>
         </div>
       </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="preset">规则预设</label>
+          <select id="preset" style="width:100%;padding:8px;border:1px solid rgba(127,127,127,.35);border-radius:8px;">
+            <option value="">跟随服务端配置（默认）</option>
+            <option value="cn_direct">国内直连（国外代理）</option>
+            <option value="global_direct">全部直连</option>
+            <option value="global_proxy">全部代理</option>
+            <option value="proxy_domains_only">仅代理下方域名</option>
+            <option value="direct_domains_only">仅直连下方域名</option>
+          </select>
+        </div>
+        <div>
+          <label>
+            <input id="adblock" type="checkbox" /> 广告拦截（geosite:category-ads-all）
+          </label>
+          <div class="muted">需要客户端提供 geosite 数据库</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>
+            <input id="doh" type="checkbox" /> DoH 常见域名直连
+          </label>
+          <div class="muted">dns.google, cloudflare-dns.com 等</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="bypass">直连域名（逗号分隔）</label>
+          <input id="bypass" type="text" placeholder="例如：example.cn,*.local" />
+        </div>
+        <div>
+          <label for="proxyd">代理域名（逗号分隔）</label>
+          <input id="proxyd" type="text" placeholder="例如：example.com,*.google.com" />
+        </div>
+      </div>
       <div class="btns">
         <button class="primary" id="btn-convert">转换</button>
         <button id="btn-clear">清空</button>
@@ -159,12 +196,22 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
       const alpn = $("#alpn").value.trim();
 
       try {
+        // 构建转换选项
+        const payload = { subscription };
+        const preset = document.querySelector('#preset')?.value?.trim();
+        if (preset) payload.rules_preset = preset;
+        const adblock = document.querySelector('#adblock')?.checked;
+        if (adblock) payload.enable_adblock = true;
+        const doh = document.querySelector('#doh')?.checked;
+        if (doh) payload.enable_doh_direct = true;
+        const bypass = document.querySelector('#bypass')?.value?.trim();
+        if (bypass) payload.bypass_domains = bypass;
+        const proxyd = document.querySelector('#proxyd')?.value?.trim();
+        if (proxyd) payload.proxy_domains = proxyd;
+
         const resp = await fetch('/convert', {
           method: 'POST',
           headers: buildHeaders(),
-          const presetCn = document.querySelector('#preset-cn')?.checked;
-          const payload = { subscription };
-          if (presetCn) payload.rules_preset = 'cn_direct';
           body: JSON.stringify(payload)
         });
         const text = await resp.text();

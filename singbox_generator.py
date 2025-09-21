@@ -92,24 +92,51 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         },
     ]
 
-    preset = (os.getenv("RULES_PRESET", "").strip().lower())
-    if (os.getenv("ENABLE_CN_RULES", "").lower() in ("1", "true", "yes", "on")) or preset in ("cn_direct", "cn-direct", "cn"):
+    preset_opt = (options or {}).get("rules_preset") if options else None
+    preset_env = os.getenv("RULES_PRESET", "")
+    preset = (preset_opt or preset_env or "").strip().lower()
+    enable_cn_rules_env = os.getenv("ENABLE_CN_RULES", "").lower() in ("1", "true", "yes", "on")
+    enable_doh_direct = (options.get("enable_doh_direct") if options and options.get("enable_doh_direct") is not None else os.getenv("ENABLE_DOH_DIRECT", "").lower() in ("1", "true", "yes", "on"))
+    strict_global_proxy = (options.get("strict_global_proxy") if options and options.get("strict_global_proxy") is not None else os.getenv("STRICT_GLOBAL_PROXY", "").lower() in ("1", "true", "yes", "on"))
+    bypass_env = os.getenv("BYPASS_DOMAINS", "")
+    proxy_env = os.getenv("PROXY_DOMAINS", "")
+    bypass_str = (options.get("bypass_domains") if options else None) or bypass_env
+    proxy_str = (options.get("proxy_domains") if options else None) or proxy_env
+    bypass_domains = [d.strip() for d in (bypass_str or "").split(",") if d.strip()]
+    proxy_domains = [d.strip() for d in (proxy_str or "").split(",") if d.strip()]
+
+    if enable_cn_rules_env or preset in ("cn_direct", "cn-direct", "cn"):
         rules.extend([
             {"outbound": "direct", "ip_cidr": ["geoip:cn"]},
             {"outbound": "direct", "domain": ["geosite:geolocation-cn", "geosite:cn"]},
         ])
+        final_tag = "proxy"
+    elif preset in ("global_direct", "direct_all", "direct"):
+        final_tag = "direct"
+    elif preset in ("global_proxy", "proxy_all", "proxy"):
+        final_tag = "proxy"
+    elif preset in ("proxy_domains_only", "proxy_only"):
+        if proxy_domains:
+            rules.append({"outbound": "proxy", "domain": proxy_domains})
+        final_tag = "direct"
+    elif preset in ("direct_domains_only", "bypass_only"):
+        if bypass_domains:
+            rules.append({"outbound": "direct", "domain": bypass_domains})
+        final_tag = "proxy"
+    else:
+        final_tag = "proxy"
 
     # 广告拦截（需要 geosite 数据库）：将广告域名导向阻断出站
-    enable_adblock = os.getenv("ENABLE_ADBLOCK", "").lower() in ("1", "true", "yes", "on")
+    enable_adblock = (options.get("enable_adblock") if options and options.get("enable_adblock") is not None else os.getenv("ENABLE_ADBLOCK", "").lower() in ("1", "true", "yes", "on"))
     if enable_adblock:
         rules.append({"outbound": "block", "domain": ["geosite:category-ads-all"]})
 
     # 明确将非 CN 域名走代理（可选，通常 final=proxy 已满足）
-    if os.getenv("STRICT_GLOBAL_PROXY", "").lower() in ("1", "true", "yes", "on"):
+    if strict_global_proxy:
         rules.append({"outbound": "proxy", "domain": ["geosite:geolocation-!cn"]})
 
     # DoH 常见域名直连（可选）
-    if os.getenv("ENABLE_DOH_DIRECT", "").lower() in ("1", "true", "yes", "on"):
+    if enable_doh_direct:
         rules.append({"outbound": "direct", "domain": [
             "dns.google",
             "cloudflare-dns.com",
@@ -119,17 +146,15 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         ]})
 
     # 自定义直连/代理域名（逗号分隔）
-    bypass_domains = [d.strip() for d in os.getenv("BYPASS_DOMAINS", "").split(",") if d.strip()]
-    if bypass_domains:
+    if bypass_domains and preset not in ("proxy_domains_only", "proxy_only"):
         rules.append({"outbound": "direct", "domain": bypass_domains})
 
-    proxy_domains = [d.strip() for d in os.getenv("PROXY_DOMAINS", "").split(",") if d.strip()]
-    if proxy_domains:
+    if proxy_domains and preset not in ("direct_domains_only", "bypass_only"):
         rules.append({"outbound": "proxy", "domain": proxy_domains})
 
     route = {
         "rules": rules,
-        "final": "proxy",
+        "final": final_tag,
     }
 
     # 如开启广告拦截，提供阻断出站
