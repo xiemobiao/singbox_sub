@@ -9,6 +9,10 @@ services:
       - API_KEY=${API_KEY:-}
       # 国内直连/国外代理 预设（也可在 1Panel 环境变量里设置）
       - RULES_PRESET=${RULES_PRESET:-cn_direct}
+      # 使用远程 rule-set 消除 geosite/geoip 弃用警告（0 关闭）
+      - USE_RULE_SET=${USE_RULE_SET:-1}
+      # rule-set 源（默认 Loyalsoldier，可自定义镜像）
+      - RULE_SET_BASE=${RULE_SET_BASE:-https://raw.githubusercontent.com/Loyalsoldier/sing-box-rules/release/rule-set}
       # 可选：常见 DoH 域名直连
       # - ENABLE_DOH_DIRECT=${ENABLE_DOH_DIRECT:-1}
       # 可选：广告拦截（需要 geosite 数据）
