@@ -110,6 +110,7 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
     enable_adblock = options.get("enable_adblock") if options.get("enable_adblock") is not None else os.getenv("ENABLE_ADBLOCK", "").lower() in ("1", "true", "yes", "on")
     enable_doh_direct = options.get("enable_doh_direct") if options.get("enable_doh_direct") is not None else os.getenv("ENABLE_DOH_DIRECT", "").lower() in ("1", "true", "yes", "on")
     strict_global_proxy = options.get("strict_global_proxy") if options.get("strict_global_proxy") is not None else os.getenv("STRICT_GLOBAL_PROXY", "").lower() in ("1", "true", "yes", "on")
+    use_rule_set = options.get("use_rule_set") if options.get("use_rule_set") is not None else os.getenv("USE_RULE_SET", "1").lower() in ("1", "true", "yes", "on")
 
     bypass_str = options.get("bypass_domains") if options.get("bypass_domains") is not None else os.getenv("BYPASS_DOMAINS", "")
     proxy_str = options.get("proxy_domains") if options.get("proxy_domains") is not None else os.getenv("PROXY_DOMAINS", "")
@@ -117,12 +118,33 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
     proxy_domains = [d.strip() for d in (proxy_str or "").split(',') if d.strip()]
 
     # 预设
+    rule_sets: List[Dict[str, Any]] = []
+    rs_base = os.getenv("RULE_SET_BASE", "https://raw.githubusercontent.com/Loyalsoldier/sing-box-rules/release/rule-set").rstrip('/')
+    def _rs(url_name: str, tag: str) -> Dict[str, Any]:
+        return {
+            "type": "remote",
+            "format": "binary",
+            "url": f"{rs_base}/{url_name}",
+            "tag": tag,
+            "download_detour": "proxy",
+            "update_interval": "168h",
+        }
+
     if enable_cn_rules_env or preset in ("cn_direct", "cn-direct", "cn"):
-        # 使用 sing-box 原生匹配字段：geoip/geosite，而不是把 geoip:xx 放进 ip_cidr
-        rules.extend([
-            {"outbound": "direct", "geoip": ["cn"]},
-            {"outbound": "direct", "geosite": ["geolocation-cn", "cn"]},
-        ])
+        if use_rule_set:
+            # 使用远程 rule-set，避免 geosite/geoip 弃用警告
+            rule_sets.append(_rs("geoip-cn.srs", "geoip-cn"))
+            rule_sets.append(_rs("geosite-geolocation-cn.srs", "geosite-geolocation-cn"))
+            rules.extend([
+                {"outbound": "direct", "rule_set": ["geoip-cn"]},
+                {"outbound": "direct", "rule_set": ["geosite-geolocation-cn"]},
+            ])
+        else:
+            # 回退：仍使用 geosite/geoip（可能出现弃用警告）
+            rules.extend([
+                {"outbound": "direct", "geoip": ["cn"]},
+                {"outbound": "direct", "geosite": ["geolocation-cn", "cn"]},
+            ])
         final_tag = "proxy"
     elif preset in ("global_direct", "direct_all", "direct"):
         final_tag = "direct"
@@ -141,7 +163,11 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
 
     # 广告拦截与 DoH 直连
     if enable_adblock:
-        rules.append({"outbound": "block", "geosite": ["category-ads-all"]})
+        if use_rule_set:
+            rule_sets.append(_rs("geosite-category-ads-all.srs", "ads-all"))
+            rules.append({"outbound": "block", "rule_set": ["ads-all"]})
+        else:
+            rules.append({"outbound": "block", "geosite": ["category-ads-all"]})
     if enable_doh_direct:
         rules.append({"outbound": "direct", "domain": [
             "dns.google",
@@ -153,8 +179,12 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
 
     # 严格全局代理（确保非 CN 显式走代理）
     if strict_global_proxy:
-        # 显式将非 CN 域名走代理
-        rules.append({"outbound": "proxy", "geosite": ["geolocation-!cn"]})
+        if use_rule_set:
+            rule_sets.append(_rs("geosite-geolocation-!cn.srs", "geolocation-not-cn"))
+            rules.append({"outbound": "proxy", "rule_set": ["geolocation-not-cn"]})
+        else:
+            # 显式将非 CN 域名走代理
+            rules.append({"outbound": "proxy", "geosite": ["geolocation-!cn"]})
 
     # 自定义直连/代理域名（与“仅*域名”预设互斥追加）
     if bypass_domains and preset not in ("proxy_domains_only", "proxy_only"):
@@ -166,6 +196,8 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
         "rules": rules,
         "final": final_tag,
     }
+    if use_rule_set and rule_sets:
+        route["rule_set"] = rule_sets
 
     # 如启用广告拦截，提供 block 出站
     if enable_adblock:
