@@ -244,6 +244,29 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
       }
     }
 
+    // 移除旧版“国内直连（checkbox）”区块（如仍存在）
+    (function removeLegacyPresetCheckbox() {
+      const legacy = document.querySelector('#preset-cn');
+      if (legacy) {
+        const row = legacy.closest('.row');
+        if (row && row.parentElement) row.parentElement.removeChild(row);
+      }
+    })();
+
+    // 预设联动：当选择“仅代理域名/仅直连接名”时禁用对应输入
+    function syncPresetEffects() {
+      const preset = document.querySelector('#preset')?.value?.trim();
+      const bypass = document.querySelector('#bypass');
+      const proxyd = document.querySelector('#proxyd');
+      if (!bypass || !proxyd) return;
+      bypass.disabled = false; proxyd.disabled = false;
+      if (preset === 'proxy_domains_only') {
+        bypass.disabled = true;
+      } else if (preset === 'direct_domains_only') {
+        proxyd.disabled = true;
+      }
+    }
+
     document.addEventListener('click', (ev) => {
       const t = ev.target;
       if (t.matches('.copy')) {
@@ -254,6 +277,8 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
     $("#btn-convert").addEventListener('click', convert);
     $("#btn-clear").addEventListener('click', () => { $("#sub").value = ''; msg(''); });
     $("#btn-paste").addEventListener('click', pasteToTextarea);
+    document.querySelector('#preset')?.addEventListener('change', syncPresetEffects);
+    syncPresetEffects();
   </script>
 </body>
 </html>
