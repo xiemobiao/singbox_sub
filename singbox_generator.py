@@ -92,16 +92,21 @@ def generate_singbox_url(nodes: List[Dict[str, Any]]) -> str:
         },
     ]
 
-    if (os.getenv("ENABLE_CN_RULES", "").lower() in ("1", "true", "yes", "on")):
+    preset = (os.getenv("RULES_PRESET", "").strip().lower())
+    if (os.getenv("ENABLE_CN_RULES", "").lower() in ("1", "true", "yes", "on")) or preset in ("cn_direct", "cn-direct", "cn"):
         rules.extend([
             {"outbound": "direct", "ip_cidr": ["geoip:cn"]},
-            {"outbound": "direct", "domain": ["geosite:cn"]},
+            {"outbound": "direct", "domain": ["geosite:geolocation-cn", "geosite:cn"]},
         ])
 
     # 广告拦截（需要 geosite 数据库）：将广告域名导向阻断出站
     enable_adblock = os.getenv("ENABLE_ADBLOCK", "").lower() in ("1", "true", "yes", "on")
     if enable_adblock:
         rules.append({"outbound": "block", "domain": ["geosite:category-ads-all"]})
+
+    # 明确将非 CN 域名走代理（可选，通常 final=proxy 已满足）
+    if os.getenv("STRICT_GLOBAL_PROXY", "").lower() in ("1", "true", "yes", "on"):
+        rules.append({"outbound": "proxy", "domain": ["geosite:geolocation-!cn"]})
 
     # DoH 常见域名直连（可选）
     if os.getenv("ENABLE_DOH_DIRECT", "").lower() in ("1", "true", "yes", "on"):
