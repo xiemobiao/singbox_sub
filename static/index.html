@@ -93,6 +93,16 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
       </div>
       <div class="row" style="margin-top:8px">
         <div>
+          <label for="ruleset-base">rule-set 源（可选）</label>
+          <input id="ruleset-base" type="text" placeholder="https://raw.githubusercontent.com/Loyalsoldier/sing-box-rules/release/rule-set" />
+          <div class="muted">留空使用服务端 RULE_SET_BASE</div>
+        </div>
+        <div>
+          <div id="rs-hint" class="muted">开启广告拦截/严格全局代理时，建议启用 rule-set</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
           <label for="bypass">直连域名（逗号分隔）</label>
           <input id="bypass" type="text" placeholder="例如：example.cn,*.local" />
         </div>
@@ -227,6 +237,8 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         if (strict) payload.strict_global_proxy = true;
         const useRS = document.querySelector('#use-ruleset')?.checked;
         if (useRS !== undefined) payload.use_rule_set = !!useRS;
+        const rsBase = document.querySelector('#ruleset-base')?.value?.trim();
+        if (rsBase) payload.rule_set_base = rsBase;
         const alpn = document.querySelector('#alpn')?.value?.trim();
         if (alpn) payload.default_alpn = alpn;
         const bypass = document.querySelector('#bypass')?.value?.trim();
@@ -282,6 +294,25 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
     document.querySelector('#btn-clear').addEventListener('click', () => { document.querySelector('#sub').value = ''; msg(''); });
     document.querySelector('#btn-paste').addEventListener('click', pasteToTextarea);
     document.querySelector('#preset')?.addEventListener('change', syncPresetEffects);
+    // 关联 rule-set 提示逻辑
+    function syncRuleSetHint() {
+      const el = document.querySelector('#rs-hint');
+      const useRS = document.querySelector('#use-ruleset')?.checked;
+      const ad = document.querySelector('#adblock')?.checked;
+      const sgp = document.querySelector('#strict')?.checked;
+      if (!el) return;
+      if (!useRS && (ad || sgp)) {
+        el.textContent = '已开启广告拦截/严格全局代理，但关闭了 rule-set；可能触发弃用警告/规则不全';
+      } else if (useRS) {
+        el.textContent = '使用 rule-set：规则将自动远程更新（首个下载需网络可达）';
+      } else {
+        el.textContent = '未使用 rule-set：将回退 geosite/geoip（可能出现弃用警告）';
+      }
+    }
+    document.querySelector('#use-ruleset')?.addEventListener('change', syncRuleSetHint);
+    document.querySelector('#adblock')?.addEventListener('change', syncRuleSetHint);
+    document.querySelector('#strict')?.addEventListener('change', syncRuleSetHint);
+    syncRuleSetHint();
     syncPresetEffects();
   </script>
 </body>

@@ -29,6 +29,8 @@ class ConvertRequest(BaseModel):
     bypass_domains: Optional[str] = None
     proxy_domains: Optional[str] = None
     use_rule_set: Optional[bool] = None
+    # 可选：规则集基础地址（覆盖服务端 RULE_SET_BASE）
+    rule_set_base: Optional[str] = None
     # 默认为空；当节点未提供 alpn 时可用逗号分隔覆盖，如 "h2,h3"
     default_alpn: Optional[str] = None
 
@@ -159,6 +161,7 @@ async def convert(body: ConvertRequest, request: Request):
             "bypass_domains": body.bypass_domains,
             "proxy_domains": body.proxy_domains,
             "use_rule_set": body.use_rule_set,
+            "rule_set_base": body.rule_set_base,
             "default_alpn": body.default_alpn,
         }
         options = {k: v for k, v in options.items() if v is not None}

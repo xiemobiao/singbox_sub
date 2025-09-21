@@ -119,7 +119,8 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
 
     # 预设
     rule_sets: List[Dict[str, Any]] = []
-    rs_base = os.getenv("RULE_SET_BASE", "https://raw.githubusercontent.com/Loyalsoldier/sing-box-rules/release/rule-set").rstrip('/')
+    # 允许请求覆盖规则集源；否则走环境变量/默认值
+    rs_base = (options.get("rule_set_base") or os.getenv("RULE_SET_BASE", "https://raw.githubusercontent.com/Loyalsoldier/sing-box-rules/release/rule-set")).rstrip('/')
     def _rs(url_name: str, tag: str) -> Dict[str, Any]:
         return {
             "type": "remote",
