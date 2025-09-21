@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hy2 → Sing-box 转换器</title>
+  <title>Hysteria2/Hy2 → Sing-box 转换器</title>
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; margin: 0; }
@@ -31,32 +31,25 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="referrer" content="no-referrer" />
   <meta name="format-detection" content="telephone=no" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 </head>
 <body>
   <div class="container">
     <h1>Hysteria2/Hy2 → Sing-box 转换器</h1>
 
     <div class="card">
-      <label for="sub">输入 Hysteria2/Hy2 订阅（支持原始 URI、多行、整段 Base64、或远端 URL）</label>
+      <label for="sub">输入 Hysteria2/Hy2 订阅（原始 URI、多行、整段 Base64、或远端 URL）</label>
       <textarea id="sub" placeholder="例如：
 hy2://example.com:443?password=pw&sni=example.com#示例节点
 或粘贴远端订阅 URL"></textarea>
       <div class="row" style="margin-top:10px">
         <div>
-          <label for="apikey">API Key（可选，若后端启用认证）</label>
+          <label for="apikey">API Key（可选，服务端启用鉴权时填写）</label>
           <input id="apikey" type="password" placeholder="Bearer Token" />
         </div>
         <div>
           <label for="alpn">默认 ALPN（可选，覆盖后端 DEFAULT_ALPN）</label>
-          <input id="alpn" type="text" placeholder="例如：h3 或 h2,h3（留空不覆盖）" />
-        </div>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div>
-          <label>
-            <input id="preset-cn" type="checkbox" /> 国内直连（国外代理）
-          </label>
-          <div class="muted">等同 RULES_PRESET=cn_direct</div>
+          <input id="alpn" type="text" placeholder="例如：h3 或 h2,h3（当前仅示意，不覆盖）" />
         </div>
       </div>
       <div class="row" style="margin-top:8px">
@@ -85,6 +78,12 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
           </label>
           <div class="muted">dns.google, cloudflare-dns.com 等</div>
         </div>
+        <div>
+          <label>
+            <input id="strict" type="checkbox" /> 严格全局代理
+          </label>
+          <div class="muted">将 geosite:geolocation-!cn 显式走代理</div>
+        </div>
       </div>
       <div class="row" style="margin-top:8px">
         <div>
@@ -94,14 +93,6 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         <div>
           <label for="proxyd">代理域名（逗号分隔）</label>
           <input id="proxyd" type="text" placeholder="例如：example.com,*.google.com" />
-        </div>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div>
-          <label>
-            <input id="strict" type="checkbox" /> 严格全局代理
-          </label>
-          <div class="muted">将 geosite:geolocation-!cn 显式走代理</div>
         </div>
       </div>
       <div class="btns">
@@ -157,12 +148,12 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
       </div>
     </div>
 
-    <p class="muted">提示：后端每分钟默认限 5 次转换；若启用 API Key，请在上方填写。</p>
+    <p class="muted">提示：默认每分钟 5 次转换；若服务端开启 API Key，请在上方输入。</p>
   </div>
 
   <script>
     const $ = (sel) => document.querySelector(sel);
-    const msg = (text, cls = '') => { const m = $("#msg"); m.textContent = text || ''; m.className = 'muted ' + cls; };
+    const msg = (text, cls = '') => { const m = document.querySelector('#msg'); m.textContent = text || ''; m.className = 'muted ' + cls; };
 
     async function copyFrom(selector) {
       const el = $(selector);
@@ -174,13 +165,13 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
     async function pasteToTextarea() {
       try {
         const text = await navigator.clipboard.readText();
-        $("#sub").value = text || '';
+        document.querySelector('#sub').value = text || '';
       } catch { msg('无法读取剪贴板（需要权限）', 'err'); }
     }
 
     function buildHeaders() {
       const headers = { 'Content-Type': 'application/json' };
-      const token = $("#apikey").value.trim();
+      const token = document.querySelector('#apikey').value.trim();
       if (token) headers['Authorization'] = 'Bearer ' + token;
       return headers;
     }
@@ -190,21 +181,16 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         const resp = await fetch(`/subscription/${b64}?format=json`, { method: 'GET' });
         if (!resp.ok) return;
         const data = await resp.json();
-        $("#json-preview").textContent = JSON.stringify(data, null, 2);
+        document.querySelector('#json-preview').textContent = JSON.stringify(data, null, 2);
       } catch(_) {}
     }
 
     async function convert() {
-      const subscription = $("#sub").value.trim();
-      if (!subscription) { msg('请输入订阅内容', 'err'); return; }
+      const subscription = document.querySelector('#sub').value.trim();
+      if (!subscription) { msg('请先输入订阅内容', 'err'); return; }
       msg('转换中...');
 
-      // 可选：通过查询参数 hint 覆盖默认 ALPN，后端读取环境变量 DEFAULT_ALPN；
-      // 这里仅作为示例，不改变协议。若需严格前端控制，可在后端增加参数。
-      const alpn = $("#alpn").value.trim();
-
       try {
-        // 构建转换选项
         const payload = { subscription };
         const preset = document.querySelector('#preset')?.value?.trim();
         if (preset) payload.rules_preset = preset;
@@ -229,31 +215,20 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         try { data = JSON.parse(text); } catch { throw new Error(text || '未知错误'); }
         if (!resp.ok) throw new Error(data?.detail || '请求失败');
 
-        $("#panel-result").classList.remove('hidden');
-        $("#nodes-count").textContent = data.nodes_count ?? '';
-        $("#b64").textContent = data.singbox_config ?? '';
-        $("#url").value = data.subscription_url ?? '';
-        $("#url-short").value = data.subscription_url_short ?? '';
-        $("#url-short-json").value = data.subscription_url_short_json ?? '';
+        document.querySelector('#panel-result').classList.remove('hidden');
+        document.querySelector('#nodes-count').textContent = data.nodes_count ?? '';
+        document.querySelector('#b64').textContent = data.singbox_config ?? '';
+        document.querySelector('#url').value = data.subscription_url ?? '';
+        document.querySelector('#url-short').value = data.subscription_url_short ?? '';
+        document.querySelector('#url-short-json').value = data.subscription_url_short_json ?? '';
         msg('转换成功', 'ok');
 
-        // 预览 JSON
         await previewJson(data.singbox_config);
       } catch (e) {
         msg('转换失败：' + (e?.message || e), 'err');
       }
     }
 
-    // 移除旧版“国内直连（checkbox）”区块（如仍存在）
-    (function removeLegacyPresetCheckbox() {
-      const legacy = document.querySelector('#preset-cn');
-      if (legacy) {
-        const row = legacy.closest('.row');
-        if (row && row.parentElement) row.parentElement.removeChild(row);
-      }
-    })();
-
-    // 预设联动：当选择“仅代理域名/仅直连接名”时禁用对应输入
     function syncPresetEffects() {
       const preset = document.querySelector('#preset')?.value?.trim();
       const bypass = document.querySelector('#bypass');
@@ -274,9 +249,9 @@ hy2://example.com:443?password=pw&sni=example.com#示例节点
         if (sel) copyFrom(sel);
       }
     });
-    $("#btn-convert").addEventListener('click', convert);
-    $("#btn-clear").addEventListener('click', () => { $("#sub").value = ''; msg(''); });
-    $("#btn-paste").addEventListener('click', pasteToTextarea);
+    document.querySelector('#btn-convert').addEventListener('click', convert);
+    document.querySelector('#btn-clear').addEventListener('click', () => { document.querySelector('#sub').value = ''; msg(''); });
+    document.querySelector('#btn-paste').addEventListener('click', pasteToTextarea);
     document.querySelector('#preset')?.addEventListener('change', syncPresetEffects);
     syncPresetEffects();
   </script>
