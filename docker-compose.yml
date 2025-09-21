@@ -4,7 +4,7 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "40233:8000"
     environment:
       - API_KEY=${API_KEY:-}
       # 国内直连/国外代理 预设（也可在 1Panel 环境变量里设置）
