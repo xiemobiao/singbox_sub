@@ -38,11 +38,10 @@ def generate_singbox_url(nodes: List[Dict[str, Any]], options: Optional[Dict[str
                 "insecure": bool(node['insecure']),
             }
         }
-        # 端口跳跃：若存在 server_ports 则使用范围列表，否则使用单端口
+        # 端口配置：始终写 server_port，若存在 server_ports 则额外写范围，兼容旧版客户端
+        outbound["server_port"] = node['port']
         if node.get('server_ports'):
             outbound["server_ports"] = node['server_ports']
-        else:
-            outbound["server_port"] = node['port']
         if node.get('sni'):
             outbound["tls"]["server_name"] = node.get('sni')
 
